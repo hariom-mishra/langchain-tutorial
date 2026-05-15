@@ -10,9 +10,9 @@ this is a subgraph workflow where we use a subgraph to translate text
 load_dotenv()
 
 class SubState(TypedDict):
-
     input_text: str
     translated_text: str
+
 subgraph_llm = ChatOpenAI(model='gpt-4o')
 def translate_text(state: SubState):
 
@@ -35,6 +35,8 @@ subgraph_builder.add_edge(START, 'translate_text')
 subgraph_builder.add_edge('translate_text', END)
 
 subgraph = subgraph_builder.compile()
+
+
 class ParentState(TypedDict):
 
     question: str

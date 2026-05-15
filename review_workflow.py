@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 """
 this is a state graph workflow where we check sentiment of a review
-and then respond to it accordingly
+and then respond to it accordingly here we are making conditional workflow
 """
 
 load_dotenv()
