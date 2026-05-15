@@ -1,7 +1,6 @@
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict
 class BatsmanState(TypedDict):
-
     runs: int
     balls: int
     fours: int
@@ -11,6 +10,12 @@ class BatsmanState(TypedDict):
     bpb: float
     boundary_percent: float
     summary: str
+
+    """
+    This is a simple parallel workflow where we calculate sr, bpb and boundary percent in parallel
+    and then print the summary
+    """
+
 def calculate_sr(state: BatsmanState):
 
     sr = (state['runs']/state['balls'])*100

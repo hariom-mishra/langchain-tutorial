@@ -8,6 +8,9 @@ from langgraph.graph.message import add_messages
 load_dotenv()
 
 class ChatbotState(TypedDict):
+    #here annotated provides meta data to the state that
+    # it will reciever list of messages and when new data comes
+    # it should be added not replaced
     messages: Annotated[list[BaseMessage], add_messages]
 
 model = ChatOpenAI()

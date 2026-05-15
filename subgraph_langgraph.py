@@ -2,8 +2,13 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
+
+"""
+this is a subgraph workflow where we use a subgraph to translate text
+"""
+
 load_dotenv()
-True
+
 class SubState(TypedDict):
 
     input_text: str

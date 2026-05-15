@@ -4,6 +4,11 @@ from typing import TypedDict, Literal
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+"""
+this is a state graph workflow where we check sentiment of a review
+and then respond to it accordingly
+"""
+
 load_dotenv()
 
 model = ChatOpenAI(model='gpt-4o-mini')

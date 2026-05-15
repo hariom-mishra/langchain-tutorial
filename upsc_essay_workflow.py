@@ -5,6 +5,11 @@ from typing import TypedDict, Annotated
 from pydantic import BaseModel, Field
 import operator
 
+"""
+this is a state graph workflow where we evaluate an essay on different parameters
+and then combine the results to give a final feedback
+"""
+
 load_dotenv()
 
 model = ChatOpenAI(temperature=0, model='gpt-4o-mini')

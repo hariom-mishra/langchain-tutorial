@@ -4,14 +4,17 @@ from typing import TypedDict
 from dotenv import load_dotenv
 load_dotenv()
 
+"""
+this is a prompt chaining workflow where we use llm to generate outline and then use it to generate blog
+"""
+
 model = ChatOpenAI()
 class BlogState(TypedDict):
-
     title: str
     outline: str
     content: str
-def create_outline(state: BlogState) -> BlogState:
 
+def create_outline(state: BlogState) -> BlogState:
     # fetch title
     title = state['title']
 
@@ -23,6 +26,7 @@ def create_outline(state: BlogState) -> BlogState:
     state['outline'] = outline
 
     return state
+
 def create_blog(state: BlogState) -> BlogState:
 
     title = state['title']
@@ -35,6 +39,7 @@ def create_blog(state: BlogState) -> BlogState:
     state['content'] = content
 
     return state
+
 graph = StateGraph(BlogState)
 
 # nodes

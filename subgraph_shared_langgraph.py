@@ -2,8 +2,12 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
+
+"""
+this is a shared subgraph workflow where we use a subgraph to translate text
+"""
+
 load_dotenv()
-True
 class ParentState(TypedDict):
 
     question: str
@@ -12,6 +16,8 @@ class ParentState(TypedDict):
     
 parent_llm = ChatOpenAI(model='gpt-4o-mini')
 subgraph_llm = ChatOpenAI(model='gpt-4o')
+
+#==========================subgraph function==================================
 def translate_text(state: ParentState):
 
     prompt = f"""
@@ -33,6 +39,8 @@ subgraph_builder.add_edge(START, 'translate_text')
 subgraph_builder.add_edge('translate_text', END)
 
 subgraph = subgraph_builder.compile()
+
+#==========================parent function==================================
 def generate_answer(state: ParentState):
 
     answer = parent_llm.invoke(f"You are a helpful assistant. Answer clearly.\n\nQuestion: {state['question']}").content

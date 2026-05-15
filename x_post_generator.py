@@ -5,6 +5,11 @@ from typing import TypedDict, Literal, Annotated
 from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage, HumanMessage
 
+"""
+this is a conditional workflow where we check if the tweet is approved or not
+and if not then we optimize it
+"""
+
 load_dotenv()
 
 generator_llm = ChatOpenAI(model='gpt-4o-mini')

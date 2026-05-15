@@ -1,6 +1,11 @@
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict
 
+"""
+simple sequential bmi workflow where we calculate bmi 
+and then based on that check fitness
+"""
+
 class BMIState(TypedDict):
     weight_kg: float
     height_m: float
