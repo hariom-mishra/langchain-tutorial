@@ -1,130 +1,190 @@
-from typing import List, TypedDict
-import re
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from pydantic import BaseModel
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
 from dotenv import load_dotenv
 
 load_dotenv()
-docs = (
-    PyPDFLoader("./documents/book1.pdf").load()
-    + PyPDFLoader("./documents/book2.pdf").load()
-    + PyPDFLoader("./documents/book3.pdf").load()
+
+# ----------------------------
+# LLM
+# ----------------------------
+
+llm = ChatOpenAI(model="gpt-4o-mini")
+
+# ----------------------------
+# Sample Docs
+# ----------------------------
+
+docs = [
+    Document(page_content="Python is used for AI and machine learning."),
+    Document(page_content="LangGraph is used to build agent workflows."),
+    Document(page_content="FAISS is a vector database for similarity search."),
+]
+
+# ----------------------------
+# Vector Store
+# ----------------------------
+
+embedding_model = OpenAIEmbeddings()
+
+vectorstore = FAISS.from_documents(
+    docs,
+    embedding_model
 )
-chunks = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=150).split_documents(docs)
-for d in chunks:
-    d.page_content = d.page_content.encode("utf-8", "ignore").decode("utf-8", "ignore")
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-vector_store = FAISS.from_documents(chunks, embeddings)
-retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-class State(TypedDict):
+
+retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+
+# ----------------------------
+# State
+# ----------------------------
+
+class RagState(TypedDict):
+
     question: str
-    docs: List[Document]
-
-    strips: List[str]            # output of decomposition (sentence strips)
-    kept_strips: List[str]       # after filtering (kept sentences)
-    refined_context: str         # recomposed internal knowledge (joined kept_strips)
-
+    rewritten_question: str
+    documents: list
+    relevant: bool
     answer: str
-def retrieve(state: State) -> State:
-    q = state["question"]
-    return {"docs": retriever.invoke(q)}
-# -----------------------------
-# Sentence-level DECOMPOSER
-# -----------------------------
-def decompose_to_sentences(text: str) -> List[str]:
-    text = re.sub(r"\s+", " ", text).strip()
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    return [s.strip() for s in sentences if len(s.strip()) > 20]
 
+# ----------------------------
+# Retrieve Node
+# ----------------------------
 
-# -----------------------------
-# FILTER (LLM judge)
-# -----------------------------
-class KeepOrDrop(BaseModel):
-    keep: bool
+def retrieve(state: RagState):
 
-filter_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a strict relevance filter.\n"
-            "Return keep=true only if the sentence directly helps answer the question.\n"
-            "Use ONLY the sentence. Output JSON only.",
-        ),
-        ("human", "Question: {question}\n\nSentence:\n{sentence}"),
-    ]
-)
+    query = state.get("rewritten_question") or state["question"]
 
-filter_chain = filter_prompt | llm.with_structured_output(KeepOrDrop)
-
-
-# -----------------------------
-# REFINING (Decompose -> Filter -> Recompose)
-# -----------------------------
-def refine(state: State) -> State:
-
-    q = state["question"]
-
-    # Combine retrieved docs into one context string
-    context = "\n\n".join(d.page_content for d in state["docs"]).strip()
-
-    # 1) DECOMPOSITION: context -> sentence strips
-    strips = decompose_to_sentences(context)
-
-    # 2) FILTER: keep only relevant strips
-    kept: List[str] = []
-    
-    for s in strips:
-        if filter_chain.invoke({"question": q, "sentence": s}).keep:
-            kept.append(s)
-
-    # 3) RECOMPOSE: glue kept strips back together (internal knowledge)
-    refined_context = "\n".join(kept).strip()
+    docs = retriever.invoke(query)
 
     return {
-        "strips": strips,
-        "kept_strips": kept,
-        "refined_context": refined_context,
+        "documents": docs
     }
-answer_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a helpful ML tutor. Answer ONLY using the provided refined bullets.\n"
-            "If the bullets are empty or insufficient, say: 'I don't know based on the provided books.'",
-        ),
-        ("human", "Question: {question}\n\nRefined context:\n{refined_context}"),
-    ]
+
+# ----------------------------
+# Relevance Check
+# ----------------------------
+
+def check_relevance(state: RagState):
+
+    docs_text = "\n".join(
+        [doc.page_content for doc in state["documents"]]
+    )
+
+    prompt = f"""
+You are checking retrieval quality.
+
+Question:
+{state["question"]}
+
+Retrieved Docs:
+{docs_text}
+
+Are these docs relevant enough to answer the question?
+
+Reply only:
+YES or NO
+"""
+
+    result = llm.invoke(prompt).content.strip().upper()
+
+    return {
+        "relevant": result == "YES"
+    }
+
+# ----------------------------
+# Rewrite Query
+# ----------------------------
+
+def rewrite_query(state: RagState):
+
+    prompt = f"""
+Rewrite this query to improve retrieval.
+
+Query:
+{state["question"]}
+"""
+
+    rewritten = llm.invoke(prompt).content
+
+    return {
+        "rewritten_question": rewritten
+    }
+
+# ----------------------------
+# Generate Answer
+# ----------------------------
+
+def generate_answer(state: RagState):
+
+    context = "\n".join(
+        [doc.page_content for doc in state["documents"]]
+    )
+
+    prompt = f"""
+Answer using the provided context only.
+
+Context:
+{context}
+
+Question:
+{state["question"]}
+"""
+
+    answer = llm.invoke(prompt).content
+
+    return {
+        "answer": answer
+    }
+
+# ----------------------------
+# Conditional Routing
+# ----------------------------
+
+def route_decision(state: RagState):
+
+    if state["relevant"]:
+        return "generate"
+
+    return "rewrite"
+
+# ----------------------------
+# Build Graph
+# ----------------------------
+
+builder = StateGraph(RagState)
+
+builder.add_node("retrieve", retrieve)
+builder.add_node("check_relevance", check_relevance)
+builder.add_node("rewrite", rewrite_query)
+builder.add_node("generate", generate_answer)
+
+builder.add_edge(START, "retrieve")
+
+builder.add_edge("retrieve", "check_relevance")
+
+builder.add_conditional_edges(
+    "check_relevance",
+    route_decision,
+    {
+        "generate": "generate",
+        "rewrite": "rewrite"
+    }
 )
 
-def generate(state: State) -> State:
-    out = (answer_prompt | llm).invoke({"question": state["question"], "refined_context": state['refined_context']})
-    return {"answer": out.content}
-g = StateGraph(State)
-g.add_node("retrieve", retrieve)
-g.add_node("refine", refine)
-g.add_node("generate", generate)
+builder.add_edge("rewrite", "retrieve")
 
-g.add_edge(START, "retrieve")
-g.add_edge("retrieve", "refine")
-g.add_edge("refine", "generate")
-g.add_edge("generate", END)
+builder.add_edge("generate", END)
 
-app = g.compile()
+graph = builder.compile()
 
-res = app.invoke({
-    "question": "Explain the bias–variance tradeoff",
-    "docs": [],
-    "strips": [],
-    "kept_strips": [],
-    "refined_context": "",
-    "answer": ""
+# ----------------------------
+# Run
+# ----------------------------
+
+result = graph.invoke({
+    "question": "What is LangGraph?"
 })
-print(res["answer"])
+
+print(result["answer"])
